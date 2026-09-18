@@ -1,0 +1,14 @@
+packages:
+  - "."
+
+allowBuilds:
+  "@prisma/engines": true
+  "cpu-features": true
+  "prisma": true
+  "protobufjs": true
+  "ssh2": true
+  "unrs-resolver": true
+
+minimumReleaseAgeExclude:
+  - dotenv@18.0.0
+  - prettier@3.9.8
