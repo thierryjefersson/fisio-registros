@@ -64,3 +64,38 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+.clinical-markdown-editor [role="toolbar"] {
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+}
+
+.markdown-content h1 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.markdown-content h2 {
+  margin: 0.875rem 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.markdown-content p {
+  margin: 0.5rem 0;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.markdown-content ul {
+  list-style: disc;
+}
+
+.markdown-content ol {
+  list-style: decimal;
+}

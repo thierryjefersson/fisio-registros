@@ -29,6 +29,11 @@ enum StatusPaciente {
   ALTA
 }
 
+enum TipoAvaliacao {
+  INICIAL
+  REAVALIACAO
+}
+
 model Paciente {
   id              String         @id @default(uuid()) @db.Uuid
   nome            String
@@ -48,6 +53,34 @@ model Paciente {
   createdAt       DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime       @updatedAt @db.Timestamptz(3)
 
+  avaliacoes       Avaliacao[]
+  planoTerapeutico PlanoTerapeutico?
+
   @@index([status])
   @@index([nome])
+}
+
+model Avaliacao {
+  id               String        @id @default(uuid()) @db.Uuid
+  pacienteId       String        @db.Uuid
+  tipo             TipoAvaliacao @default(INICIAL)
+  data             DateTime      @default(now()) @db.Date
+  conteudoMarkdown String        @default("") @db.Text
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@index([pacienteId, tipo, data])
+}
+
+model PlanoTerapeutico {
+  id                String   @id @default(uuid()) @db.Uuid
+  pacienteId        String   @unique @db.Uuid
+  objetivosMarkdown String   @default("") @db.Text
+  condutasMarkdown  String   @default("") @db.Text
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
 }

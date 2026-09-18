@@ -11,6 +11,10 @@ import {
   excluirPacientePorId,
   listarPacientes,
 } from "@/features/patients/queries";
+import {
+  salvarAvaliacaoInicial,
+  salvarPlanoTerapeutico,
+} from "@/features/clinical-documents/service";
 
 const execFileAsync = promisify(execFile);
 
@@ -191,6 +195,63 @@ describe("migration e agregado Paciente", () => {
     await expect(
       prisma.paciente.findUnique({ where: { id: preservado.id } }),
     ).resolves.not.toBeNull();
+  });
+
+  it("cria e edita uma única avaliação inicial", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente com avaliação",
+    });
+
+    await salvarAvaliacaoInicial(paciente.id, "# Inicial", prisma);
+    await salvarAvaliacaoInicial(paciente.id, "# Atualizada", prisma);
+
+    const avaliacoes = await prisma.avaliacao.findMany({
+      where: { pacienteId: paciente.id, tipo: "INICIAL" },
+    });
+    expect(avaliacoes).toHaveLength(1);
+    expect(avaliacoes[0].conteudoMarkdown).toBe("# Atualizada");
+  });
+
+  it("salva objetivos e condutas independentemente", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente com plano",
+    });
+
+    await salvarPlanoTerapeutico(
+      paciente.id,
+      "Objetivo A",
+      "Conduta A",
+      prisma,
+    );
+    await salvarPlanoTerapeutico(
+      paciente.id,
+      "Objetivo B",
+      "Conduta A",
+      prisma,
+    );
+
+    const plano = await prisma.planoTerapeutico.findUniqueOrThrow({
+      where: { pacienteId: paciente.id },
+    });
+    expect(plano.objetivosMarkdown).toBe("Objetivo B");
+    expect(plano.condutasMarkdown).toBe("Conduta A");
+  });
+
+  it("excluir paciente remove avaliação e plano em cascata", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente com documentos para excluir",
+    });
+    await salvarAvaliacaoInicial(paciente.id, "Avaliação", prisma);
+    await salvarPlanoTerapeutico(paciente.id, "Objetivos", "Condutas", prisma);
+
+    await excluirPacientePorId(paciente.id, prisma);
+
+    await expect(
+      prisma.avaliacao.count({ where: { pacienteId: paciente.id } }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.planoTerapeutico.count({ where: { pacienteId: paciente.id } }),
+    ).resolves.toBe(0);
   });
 });
 

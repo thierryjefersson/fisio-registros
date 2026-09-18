@@ -8,8 +8,12 @@ type PatientDatabase = Pick<PrismaClient, "paciente">;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+export function idPacienteValido(id: string) {
+  return UUID_PATTERN.test(id);
+}
+
 export function obterPaciente(id: string, db: PatientDatabase = prisma) {
-  if (!UUID_PATTERN.test(id)) return null;
+  if (!idPacienteValido(id)) return null;
   return db.paciente.findUnique({ where: { id } });
 }
 
@@ -34,7 +38,7 @@ export async function excluirPacientePorId(
   id: string,
   db: PatientDatabase = prisma,
 ): Promise<"deleted" | "not_found"> {
-  if (!UUID_PATTERN.test(id)) return "not_found";
+  if (!idPacienteValido(id)) return "not_found";
   const resultado = await db.paciente.deleteMany({ where: { id } });
   return resultado.count === 1 ? "deleted" : "not_found";
 }
