@@ -7,6 +7,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DiaSemana } from "@/generated/prisma/client";
 import { PrismaClient } from "@/generated/prisma/client";
+import {
+  excluirPacientePorId,
+  listarPacientes,
+} from "@/features/patients/queries";
 
 const execFileAsync = promisify(execFile);
 
@@ -123,4 +127,92 @@ describe("migration e agregado Paciente", () => {
     expect(segundoAtualizado.telefone).toBe(base.telefone);
     expect(segundoAtualizado.valorSessao.toFixed(2)).toBe("90.00");
   });
+
+  it("busca por nome sem diferenciar maiúsculas e minúsculas", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Busca CaSe InSeNsItIvE",
+    });
+
+    const encontrados = await listarPacientes(
+      { busca: "case insensitive", filtro: "todos" },
+      prisma,
+    );
+
+    expect(encontrados.map((item) => item.id)).toContain(paciente.id);
+  });
+
+  it("aplica os filtros de status e combina filtro com busca", async () => {
+    const ativo = await criarPacienteDeTeste(prisma, {
+      nome: "Filtro Combinado Ativo",
+    });
+    const alta = await criarPacienteDeTeste(prisma, {
+      nome: "Filtro Combinado Alta",
+      status: "ALTA",
+      dataAlta: new Date("2026-09-18T00:00:00.000Z"),
+    });
+
+    const ativos = await listarPacientes(
+      { busca: "Filtro Combinado", filtro: "em-tratamento" },
+      prisma,
+    );
+    const altas = await listarPacientes(
+      { busca: "Filtro Combinado", filtro: "alta" },
+      prisma,
+    );
+    const todos = await listarPacientes(
+      { busca: "Filtro Combinado", filtro: "todos" },
+      prisma,
+    );
+
+    expect(ativos.map((item) => item.id)).toEqual([ativo.id]);
+    expect(altas.map((item) => item.id)).toEqual([alta.id]);
+    expect(todos.map((item) => item.id).sort()).toEqual(
+      [ativo.id, alta.id].sort(),
+    );
+  });
+
+  it("exclui somente o UUID indicado e trata UUID inexistente", async () => {
+    const removido = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente a remover",
+    });
+    const preservado = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente preservado",
+    });
+
+    await expect(excluirPacientePorId(removido.id, prisma)).resolves.toBe(
+      "deleted",
+    );
+    await expect(excluirPacientePorId(removido.id, prisma)).resolves.toBe(
+      "not_found",
+    );
+    await expect(excluirPacientePorId("uuid-invalido", prisma)).resolves.toBe(
+      "not_found",
+    );
+    await expect(
+      prisma.paciente.findUnique({ where: { id: preservado.id } }),
+    ).resolves.not.toBeNull();
+  });
 });
+
+function criarPacienteDeTeste(
+  prisma: PrismaClient,
+  overrides: Partial<Parameters<PrismaClient["paciente"]["create"]>[0]["data"]>,
+) {
+  return prisma.paciente.create({
+    data: {
+      nome: "Paciente de teste",
+      dataNascimento: new Date("1990-01-01T00:00:00.000Z"),
+      sexo: "NAO_INFORMADO",
+      telefone: "85999990000",
+      endereco: "Rua dos Testes, 10",
+      nomeResponsavel: null,
+      patologia: "Patologia de teste",
+      queixaPrincipal: "Queixa de teste",
+      valorSessao: "100.00",
+      dataInicio: new Date("2026-09-01T00:00:00.000Z"),
+      previsaoSessoes: 5,
+      diasAtendimento: ["SEGUNDA"],
+      ...overrides,
+    },
+  });
+}

@@ -545,8 +545,8 @@ Executar um cenário completo com dados descartáveis:
 Usar esta checklist no andamento do projeto:
 
 - [x] Etapa 0 — Fundação executável
-- [ ] Etapa 1 — Cadastro e edição de paciente
-- [ ] Etapa 2 — Listagem, busca, filtros e exclusão inicial
+- [x] Etapa 1 — Cadastro e edição de paciente
+- [x] Etapa 2 — Listagem, busca, filtros e exclusão inicial
 - [ ] Etapa 3 — Avaliação e plano terapêutico
 - [ ] Etapa 4 — Evoluções e contexto externo
 - [ ] Etapa 5 — Domínio financeiro e garantias transacionais

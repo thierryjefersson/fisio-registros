@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { SuccessToast } from "@/components/feedback/success-toast";
+import { DeletePatientDialog } from "@/components/patients/delete-patient-dialog";
+import { excluirPacienteAction } from "@/features/patients/actions";
 import { obterPaciente } from "@/features/patients/queries";
 import { DIAS_SEMANA, SEXO_LABELS } from "@/features/patients/schemas";
 import { formatarDataCivil } from "@/lib/dates";
@@ -47,12 +49,19 @@ export default async function PatientSummaryPage({
             Resumo do tratamento
           </p>
         </div>
-        <Link
-          className="inline-flex min-h-11 items-center justify-center rounded-lg border border-input bg-card px-5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          href={`/pacientes/${paciente.id}/editar`}
-        >
-          Editar cadastro
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-input bg-card px-5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            href={`/pacientes/${paciente.id}/editar`}
+          >
+            Editar cadastro
+          </Link>
+          <DeletePatientDialog
+            action={excluirPacienteAction}
+            id={paciente.id}
+            name={paciente.nome}
+          />
+        </div>
       </div>
 
       <div className="mt-8 grid gap-5 lg:grid-cols-2">

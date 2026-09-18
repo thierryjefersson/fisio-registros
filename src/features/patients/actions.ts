@@ -12,6 +12,7 @@ import {
   pacienteSchema,
   type PacienteInput,
 } from "./schemas";
+import { excluirPacientePorId } from "./queries";
 
 function formDataParaObjeto(formData: FormData) {
   return {
@@ -112,6 +113,24 @@ export async function atualizarPaciente(
     return {
       formError: "Não foi possível atualizar o tratamento. Tente novamente.",
     };
+  }
+}
+
+export async function excluirPacienteAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+
+  try {
+    const resultado = await excluirPacientePorId(id);
+    revalidatePath("/pacientes");
+    redirect(
+      resultado === "deleted"
+        ? "/pacientes?excluido=1"
+        : "/pacientes?erro=nao-encontrado",
+    );
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    console.error("Falha ao excluir paciente", error);
+    redirect("/pacientes?erro=exclusao");
   }
 }
 
