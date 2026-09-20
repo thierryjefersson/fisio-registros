@@ -32,6 +32,11 @@ import {
   obterFinanceiroPaciente,
 } from "@/features/billing/queries";
 import { obterDashboard } from "@/features/dashboard/queries";
+import { criarExportacao } from "@/features/export/service";
+import {
+  criarNomeArquivoExportacao,
+  criarRespostaExportacao,
+} from "@/features/export/serialize";
 import { concluirAlta } from "@/features/patients/discharge-service";
 
 const execFileAsync = promisify(execFile);
@@ -798,6 +803,102 @@ describe("migration e agregado Paciente", () => {
       "2030-02-04",
       "2030-02-03",
     ]);
+  });
+
+  it("exporta o agregado completo sem misturar pacientes", async () => {
+    const primeiro = await criarPacienteDeTeste(prisma, {
+      nome: "Exportação completa A",
+      valorSessao: "135.75",
+    });
+    const segundo = await criarPacienteDeTeste(prisma, {
+      nome: "Exportação isolada B",
+      valorSessao: "90.00",
+    });
+    await salvarAvaliacaoInicial(primeiro.id, "# Avaliação exportada", prisma);
+    await salvarPlanoTerapeutico(
+      primeiro.id,
+      "Objetivo exportado",
+      "Conduta exportada",
+      prisma,
+    );
+    const evolucaoPrimeiro = await criarEvolucaoDeTeste(
+      prisma,
+      primeiro.id,
+      "2026-09-18",
+      "14:30",
+    );
+    const evolucaoSegundo = await criarEvolucaoDeTeste(
+      prisma,
+      segundo.id,
+      "2026-09-19",
+      "15:45",
+    );
+    const paga = await gerarCobranca(primeiro.id, prisma);
+    const pendente = await gerarCobranca(segundo.id, prisma);
+    await atualizarStatusCobranca(
+      {
+        cobrancaId: paga.id,
+        dataPagamento: "2026-09-20",
+        pacienteId: primeiro.id,
+        status: "PAGA",
+      },
+      prisma,
+    );
+
+    const exportedAt = new Date("2026-09-20T03:04:05.000Z");
+    const backup = await criarExportacao(exportedAt, prisma);
+    const pacienteA = backup.data.pacientes.find(
+      ({ id }) => id === primeiro.id,
+    );
+    const pacienteB = backup.data.pacientes.find(({ id }) => id === segundo.id);
+
+    expect(pacienteA).toMatchObject({
+      valorSessao: "135.75",
+      avaliacoes: [{ conteudoMarkdown: "# Avaliação exportada" }],
+      planoTerapeutico: {
+        objetivosMarkdown: "Objetivo exportado",
+        condutasMarkdown: "Conduta exportada",
+      },
+      evolucoes: [{ id: evolucaoPrimeiro.id, horario: "14:30:00" }],
+      cobrancas: [
+        {
+          id: paga.id,
+          status: "PAGA",
+          dataPagamento: "2026-09-20",
+          valorUnitarioSnapshot: "135.75",
+          valorTotalSnapshot: "135.75",
+          sessoes: [{ evolucaoId: evolucaoPrimeiro.id }],
+        },
+      ],
+    });
+    expect(pacienteB).toMatchObject({
+      evolucoes: [{ id: evolucaoSegundo.id }],
+      cobrancas: [
+        {
+          id: pendente.id,
+          status: "PENDENTE",
+          dataPagamento: null,
+          sessoes: [{ evolucaoId: evolucaoSegundo.id }],
+        },
+      ],
+    });
+    expect(pacienteA?.evolucoes).not.toContainEqual(
+      expect.objectContaining({ id: evolucaoSegundo.id }),
+    );
+    expect(pacienteB?.cobrancas).not.toContainEqual(
+      expect.objectContaining({ id: paga.id }),
+    );
+
+    const response = criarRespostaExportacao(
+      backup,
+      criarNomeArquivoExportacao(exportedAt),
+    );
+    expect(response.headers.get("Content-Type")).toBe(
+      "application/json; charset=utf-8",
+    );
+    expect(response.headers.get("Content-Disposition")).toContain(
+      "fisio-backup-2026-09-20-000405.json",
+    );
   });
 });
 

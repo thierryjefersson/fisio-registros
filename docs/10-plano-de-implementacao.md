@@ -1,5 +1,8 @@
 # Plano de implementação
 
+> **Status:** concluído em 20/09/2026. As nove etapas do MVP foram
+> implementadas e validadas pelos gates de qualidade definidos neste plano.
+
 ## Como usar este plano
 
 O desenvolvimento é dividido em nove etapas ordenadas. Cada etapa entrega um incremento verificável e inclui os testes automatizados das regras introduzidas nela.
@@ -552,4 +555,4 @@ Usar esta checklist no andamento do projeto:
 - [x] Etapa 5 — Domínio financeiro e garantias transacionais
 - [x] Etapa 6 — Financeiro do paciente e financeiro geral
 - [x] Etapa 7 — Alta e dashboard
-- [ ] Etapa 8 — Exportação, responsividade e fechamento do MVP
+- [x] Etapa 8 — Exportação, responsividade e fechamento do MVP

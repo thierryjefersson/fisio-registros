@@ -13,18 +13,44 @@ export function MobileNavigation() {
 
   function closeNavigation() {
     setOpen(false);
-    requestAnimationFrame(() => triggerRef.current?.focus());
+    window.setTimeout(() => triggerRef.current?.focus(), 0);
   }
 
   useEffect(() => {
     if (!open) return;
 
     firstLinkRef.current?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeNavigation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeNavigation();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const navigation = document.getElementById("mobile-navigation");
+      const focusable = navigation?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, [open]);
 
   return (
@@ -50,10 +76,12 @@ export function MobileNavigation() {
           onMouseDown={closeNavigation}
         >
           <aside
+            aria-modal="true"
             aria-label="Navegação principal"
             className="ml-auto flex min-h-full w-[min(20rem,88vw)] flex-col bg-card p-4 shadow-xl"
             id="mobile-navigation"
             onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
           >
             <div className="mb-6 flex items-center justify-between">
               <span className="font-semibold">Menu</span>
@@ -74,7 +102,7 @@ export function MobileNavigation() {
                       ref={index === 0 ? firstLinkRef : undefined}
                       className="flex min-h-12 items-center gap-3 rounded-lg px-3 font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       href={href}
-                      onClick={() => setOpen(false)}
+                      onClick={closeNavigation}
                     >
                       <Icon aria-hidden="true" className="size-5" />
                       {label}
