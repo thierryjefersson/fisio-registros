@@ -49,7 +49,10 @@ export function obterPacienteComContexto(
         take: 1,
       },
       planoTerapeutico: true,
-      evolucoes: { orderBy: ordemEvolucoes },
+      evolucoes: {
+        orderBy: ordemEvolucoes,
+        include: { itemCobranca: { select: { id: true } } },
+      },
     },
   });
 }

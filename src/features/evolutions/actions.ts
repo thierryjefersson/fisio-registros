@@ -107,6 +107,7 @@ function dadosPrisma(data: {
 }
 
 function invalidarPaciente(pacienteId: string) {
+  revalidatePath("/");
   revalidatePath(`/pacientes/${pacienteId}`);
   revalidatePath(`/pacientes/${pacienteId}/evolucoes`);
 }

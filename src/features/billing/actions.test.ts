@@ -27,7 +27,7 @@ const PACIENTE_ID = "7be5c810-f35f-4ec3-a0b9-0eeabf7b10cb";
 describe("ações financeiras", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("chama a transação, revalida somente páginas financeiras e redireciona", async () => {
+  it("chama a transação, revalida o dashboard e páginas financeiras", async () => {
     mocks.gerarCobranca.mockResolvedValue({});
     const formData = new FormData();
     formData.set("pacienteId", PACIENTE_ID);
@@ -38,6 +38,7 @@ describe("ações financeiras", () => {
 
     expect(mocks.gerarCobranca).toHaveBeenCalledWith(PACIENTE_ID);
     expect(mocks.revalidatePath.mock.calls).toEqual([
+      ["/"],
       [`/pacientes/${PACIENTE_ID}/financeiro`],
       ["/financeiro"],
     ]);

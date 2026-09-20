@@ -31,6 +31,8 @@ import {
   listarCobrancasGerais,
   obterFinanceiroPaciente,
 } from "@/features/billing/queries";
+import { obterDashboard } from "@/features/dashboard/queries";
+import { concluirAlta } from "@/features/patients/discharge-service";
 
 const execFileAsync = promisify(execFile);
 
@@ -686,6 +688,116 @@ describe("migration e agregado Paciente", () => {
     const financeiro = await obterFinanceiroPaciente(paciente.id, prisma);
     expect(financeiro?.cobrancas).toHaveLength(0);
     expect(financeiro?.evolucoes).toHaveLength(2);
+  });
+
+  it("verifica sessões livres no servidor e persiste status e data juntos", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente para alta",
+    });
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-20", "09:00");
+
+    await expect(
+      concluirAlta(
+        {
+          pacienteId: paciente.id,
+          dataAlta: "2026-09-20",
+          confirmarSessoesNaoCobradas: false,
+        },
+        prisma,
+      ),
+    ).resolves.toEqual({ status: "unbilled_sessions", count: 1 });
+    await expect(
+      prisma.paciente.findUniqueOrThrow({ where: { id: paciente.id } }),
+    ).resolves.toMatchObject({ status: "EM_TRATAMENTO", dataAlta: null });
+
+    await expect(
+      concluirAlta(
+        {
+          pacienteId: paciente.id,
+          dataAlta: "2026-09-20",
+          confirmarSessoesNaoCobradas: true,
+        },
+        prisma,
+      ),
+    ).resolves.toEqual({ status: "completed" });
+    await expect(
+      prisma.paciente.findUniqueOrThrow({ where: { id: paciente.id } }),
+    ).resolves.toMatchObject({
+      status: "ALTA",
+      dataAlta: new Date("2026-09-20T00:00:00.000Z"),
+    });
+  });
+
+  it("permite gerar cobrança antes da alta e preserva seus vínculos", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente que cobra antes da alta",
+    });
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-21", "09:00");
+    const cobranca = await gerarCobranca(paciente.id, prisma);
+
+    await expect(
+      concluirAlta(
+        {
+          pacienteId: paciente.id,
+          dataAlta: "2026-09-21",
+          confirmarSessoesNaoCobradas: false,
+        },
+        prisma,
+      ),
+    ).resolves.toEqual({ status: "completed" });
+    await expect(
+      prisma.cobrancaSessao.count({ where: { cobrancaId: cobranca.id } }),
+    ).resolves.toBe(1);
+  });
+
+  it("calcula indicadores e limita o dashboard aos cinco atendimentos recentes", async () => {
+    const antes = await obterDashboard("2030-02-15", prisma);
+    const ativo = await criarPacienteDeTeste(prisma, {
+      nome: "Dashboard ativo",
+    });
+    const pago = await criarPacienteDeTeste(prisma, {
+      nome: "Dashboard recebido",
+    });
+
+    for (let dia = 1; dia <= 6; dia += 1) {
+      await criarEvolucaoDeTeste(
+        prisma,
+        ativo.id,
+        `2030-02-${String(dia).padStart(2, "0")}`,
+        "09:00",
+      );
+    }
+    await criarEvolucaoDeTeste(prisma, pago.id, "2030-02-07", "10:00");
+    await gerarCobranca(ativo.id, prisma);
+    const cobrancaPaga = await gerarCobranca(pago.id, prisma);
+    await atualizarStatusCobranca(
+      {
+        cobrancaId: cobrancaPaga.id,
+        dataPagamento: "2030-02-15",
+        pacienteId: pago.id,
+        status: "PAGA",
+      },
+      prisma,
+    );
+
+    const depois = await obterDashboard("2030-02-15", prisma);
+    expect(depois.pacientesEmTratamento - antes.pacientesEmTratamento).toBe(2);
+    expect(depois.atendimentosNoMes - antes.atendimentosNoMes).toBe(7);
+    expect(depois.aReceber.sub(antes.aReceber).toFixed(2)).toBe("600.00");
+    expect(depois.recebidoNoMes.sub(antes.recebidoNoMes).toFixed(2)).toBe(
+      "100.00",
+    );
+    expect(depois.recentes).toHaveLength(5);
+    expect(depois.recentes[0].paciente.id).toBe(pago.id);
+    expect(
+      depois.recentes.map(({ data }) => data.toISOString().slice(0, 10)),
+    ).toEqual([
+      "2030-02-07",
+      "2030-02-06",
+      "2030-02-05",
+      "2030-02-04",
+      "2030-02-03",
+    ]);
   });
 });
 

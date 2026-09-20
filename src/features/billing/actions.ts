@@ -97,6 +97,7 @@ export async function excluirCobrancaAction(formData: FormData) {
 }
 
 function invalidarFinanceiro(pacienteId: string) {
+  revalidatePath("/");
   revalidatePath(`/pacientes/${pacienteId}/financeiro`);
   revalidatePath("/financeiro");
 }

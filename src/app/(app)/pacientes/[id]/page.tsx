@@ -5,11 +5,17 @@ import type { ReactNode } from "react";
 import { SuccessToast } from "@/components/feedback/success-toast";
 import { CopyContextActions } from "@/components/evolutions/copy-context-actions";
 import { DeletePatientDialog } from "@/components/patients/delete-patient-dialog";
+import { DischargeDialog } from "@/components/patients/discharge-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { gerarCobrancaAction } from "@/features/billing/actions";
 import { gerarContextoClinico } from "@/features/evolutions/context";
 import { obterPacienteComContexto } from "@/features/evolutions/queries";
-import { excluirPacienteAction } from "@/features/patients/actions";
+import {
+  darAltaPacienteAction,
+  excluirPacienteAction,
+} from "@/features/patients/actions";
 import { DIAS_SEMANA, SEXO_LABELS } from "@/features/patients/schemas";
 import { dateParaHorarioCivil, formatarDataCivil } from "@/lib/dates";
 import { formatarBRL, formatarTelefone } from "@/lib/formatters";
@@ -19,10 +25,10 @@ export default async function PatientSummaryPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ salvo?: string }>;
+  searchParams?: Promise<{ alta?: string; salvo?: string }>;
 }) {
   const { id } = await params;
-  const { salvo } = (await searchParams) ?? {};
+  const { alta, salvo } = (await searchParams) ?? {};
   const paciente = await obterPacienteComContexto(id);
   if (!paciente) notFound();
 
@@ -44,6 +50,9 @@ export default async function PatientSummaryPage({
     <section aria-labelledby="page-title">
       {salvo === "1" ? (
         <SuccessToast message="Tratamento salvo com sucesso." />
+      ) : null}
+      {alta === "1" ? (
+        <SuccessToast message="Alta registrada com sucesso." />
       ) : null}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -76,6 +85,17 @@ export default async function PatientSummaryPage({
           >
             Editar cadastro
           </Button>
+          {paciente.status === "EM_TRATAMENTO" ? (
+            <DischargeDialog
+              billingAction={gerarCobrancaAction}
+              dischargeAction={darAltaPacienteAction}
+              patientId={paciente.id}
+              unbilledSessions={
+                paciente.evolucoes.filter(({ itemCobranca }) => !itemCobranca)
+                  .length
+              }
+            />
+          ) : null}
           <DeletePatientDialog
             action={excluirPacienteAction}
             id={paciente.id}
@@ -111,7 +131,24 @@ export default async function PatientSummaryPage({
         </SummaryCard>
 
         <SummaryCard title="Tratamento">
-          <SummaryRow label="Status" value="Em tratamento" />
+          <div className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[minmax(10rem,0.8fr)_1.2fr] sm:gap-4">
+            <dt className="text-sm text-muted-foreground">Status</dt>
+            <dd>
+              <Badge
+                variant={paciente.status === "ALTA" ? "secondary" : "success"}
+              >
+                {paciente.status === "ALTA" ? "Alta" : "Em tratamento"}
+              </Badge>
+            </dd>
+          </div>
+          {paciente.dataAlta ? (
+            <SummaryRow
+              label="Data da alta"
+              value={formatarDataCivil(
+                paciente.dataAlta.toISOString().slice(0, 10),
+              )}
+            />
+          ) : null}
           <SummaryRow
             label="Data de início"
             value={formatarDataCivil(

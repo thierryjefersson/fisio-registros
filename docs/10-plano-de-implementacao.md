@@ -551,5 +551,5 @@ Usar esta checklist no andamento do projeto:
 - [x] Etapa 4 — Evoluções e contexto externo
 - [x] Etapa 5 — Domínio financeiro e garantias transacionais
 - [x] Etapa 6 — Financeiro do paciente e financeiro geral
-- [ ] Etapa 7 — Alta e dashboard
+- [x] Etapa 7 — Alta e dashboard
 - [ ] Etapa 8 — Exportação, responsividade e fechamento do MVP
