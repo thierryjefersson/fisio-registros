@@ -26,6 +26,11 @@ import {
   excluirCobranca,
   gerarCobranca,
 } from "@/features/billing/service";
+import { calcularResumoFinanceiro } from "@/features/billing/domain";
+import {
+  listarCobrancasGerais,
+  obterFinanceiroPaciente,
+} from "@/features/billing/queries";
 
 const execFileAsync = promisify(execFile);
 
@@ -597,6 +602,90 @@ describe("migration e agregado Paciente", () => {
     await expect(
       prisma.evolucao.count({ where: { pacienteId: paciente.id } }),
     ).resolves.toBe(0);
+  });
+
+  it("mantém cobranças e sessões isoladas entre pacientes", async () => {
+    const primeiro = await criarPacienteDeTeste(prisma, {
+      nome: "Financeiro isolado A",
+      valorSessao: "80.00",
+    });
+    const segundo = await criarPacienteDeTeste(prisma, {
+      nome: "Financeiro isolado B",
+      valorSessao: "150.00",
+    });
+    await criarEvolucaoDeTeste(prisma, primeiro.id, "2026-09-18", "09:00");
+    await criarEvolucaoDeTeste(prisma, segundo.id, "2026-09-19", "10:00");
+    const cobrancaPrimeiro = await gerarCobranca(primeiro.id, prisma);
+    const cobrancaSegundo = await gerarCobranca(segundo.id, prisma);
+
+    const financeiroPrimeiro = await obterFinanceiroPaciente(
+      primeiro.id,
+      prisma,
+    );
+    expect(financeiroPrimeiro?.cobrancas.map(({ id }) => id)).toEqual([
+      cobrancaPrimeiro.id,
+    ]);
+    expect(financeiroPrimeiro?.cobrancas).not.toContainEqual(
+      expect.objectContaining({ id: cobrancaSegundo.id }),
+    );
+  });
+
+  it("atualiza totais gerais após pagar, reabrir e excluir", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Fluxo financeiro geral",
+      valorSessao: "100.00",
+    });
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-18", "09:00");
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-19", "09:00");
+    const cobranca = await gerarCobranca(paciente.id, prisma);
+
+    let cobrancas = await listarCobrancasGerais(prisma);
+    let resumo = calcularResumoFinanceiro(
+      cobrancas.filter(({ pacienteId }) => pacienteId === paciente.id),
+      "2026-09-20",
+    );
+    expect(resumo.aReceber.toFixed(2)).toBe("200.00");
+    expect(resumo.recebidoNoMes.toFixed(2)).toBe("0.00");
+
+    await atualizarStatusCobranca(
+      {
+        cobrancaId: cobranca.id,
+        dataPagamento: "2026-09-20",
+        pacienteId: paciente.id,
+        status: "PAGA",
+      },
+      prisma,
+    );
+    cobrancas = await listarCobrancasGerais(prisma);
+    const cobrancasPaciente = cobrancas.filter(
+      ({ pacienteId }) => pacienteId === paciente.id,
+    );
+    expect(cobrancasPaciente).toHaveLength(1);
+    expect(cobrancasPaciente[0].status).toBe("PAGA");
+    resumo = calcularResumoFinanceiro(cobrancasPaciente, "2026-09-20");
+    expect(resumo.aReceber.toFixed(2)).toBe("0.00");
+    expect(resumo.recebidoNoMes.toFixed(2)).toBe("200.00");
+
+    await atualizarStatusCobranca(
+      {
+        cobrancaId: cobranca.id,
+        pacienteId: paciente.id,
+        status: "PENDENTE",
+      },
+      prisma,
+    );
+    cobrancas = await listarCobrancasGerais(prisma);
+    resumo = calcularResumoFinanceiro(
+      cobrancas.filter(({ pacienteId }) => pacienteId === paciente.id),
+      "2026-09-20",
+    );
+    expect(resumo.aReceber.toFixed(2)).toBe("200.00");
+    expect(resumo.recebidoNoMes.toFixed(2)).toBe("0.00");
+
+    await excluirCobranca(paciente.id, cobranca.id, prisma);
+    const financeiro = await obterFinanceiroPaciente(paciente.id, prisma);
+    expect(financeiro?.cobrancas).toHaveLength(0);
+    expect(financeiro?.evolucoes).toHaveLength(2);
   });
 });
 

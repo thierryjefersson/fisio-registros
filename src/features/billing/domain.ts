@@ -4,6 +4,12 @@ import { formatarBRL } from "@/lib/formatters";
 
 type ValorDecimal = Prisma.Decimal | string;
 
+type CobrancaResumo = {
+  dataPagamento: Date | string | null;
+  status: "PAGA" | "PENDENTE";
+  valorTotalSnapshot: ValorDecimal;
+};
+
 export function contarSessoes(sessoes: readonly unknown[]): number {
   return sessoes.length;
 }
@@ -75,6 +81,45 @@ export function marcarCobrancaComoPaga<T extends object>(
 
 export function voltarCobrancaParaPendente<T extends object>(cobranca: T) {
   return { ...cobranca, status: "PENDENTE" as const, dataPagamento: null };
+}
+
+export function calcularResumoFinanceiro(
+  cobrancas: readonly CobrancaResumo[],
+  referenciaCivil: string,
+) {
+  const { inicio, proximoMes } = limitesMesCivil(referenciaCivil);
+
+  return cobrancas.reduce(
+    (resumo, cobranca) => {
+      const valor = new Prisma.Decimal(cobranca.valorTotalSnapshot);
+      if (cobranca.status === "PENDENTE") {
+        resumo.aReceber = resumo.aReceber.add(valor);
+      } else if (cobranca.dataPagamento) {
+        const data = normalizarData(cobranca.dataPagamento);
+        if (data >= inicio && data < proximoMes) {
+          resumo.recebidoNoMes = resumo.recebidoNoMes.add(valor);
+        }
+      }
+      return resumo;
+    },
+    {
+      aReceber: new Prisma.Decimal(0),
+      recebidoNoMes: new Prisma.Decimal(0),
+    },
+  );
+}
+
+export function limitesMesCivil(referenciaCivil: string) {
+  if (!validarDataCivil(referenciaCivil)) {
+    throw new TypeError("A data de referência é inválida.");
+  }
+  const [ano, mes] = referenciaCivil.split("-").map(Number);
+  const proximo = new Date(Date.UTC(ano, mes, 1));
+
+  return {
+    inicio: `${referenciaCivil.slice(0, 7)}-01`,
+    proximoMes: proximo.toISOString().slice(0, 10),
+  };
 }
 
 function normalizarData(data: Date | string) {

@@ -8,6 +8,7 @@ const tabs = [
   { label: "Avaliação", suffix: "/avaliacao" },
   { label: "Plano terapêutico", suffix: "/plano" },
   { label: "Evoluções", suffix: "/evolucoes" },
+  { label: "Financeiro", suffix: "/financeiro" },
 ];
 
 export function PatientTabs({ patientId }: { patientId: string }) {

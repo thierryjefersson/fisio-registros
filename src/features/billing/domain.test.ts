@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   calcularTotalCobranca,
+  calcularResumoFinanceiro,
   contarSessoes,
   formatarListaDeDatas,
   gerarMensagemCobranca,
@@ -87,5 +88,55 @@ describe("domínio financeiro", () => {
       status: "PENDENTE",
       dataPagamento: null,
     });
+  });
+
+  it("soma em a receber somente cobranças pendentes", () => {
+    const resumo = calcularResumoFinanceiro(
+      [
+        {
+          status: "PENDENTE",
+          dataPagamento: null,
+          valorTotalSnapshot: "100.25",
+        },
+        {
+          status: "PAGA",
+          dataPagamento: "2026-09-18",
+          valorTotalSnapshot: "250.75",
+        },
+      ],
+      "2026-09-20",
+    );
+
+    expect(resumo.aReceber.toFixed(2)).toBe("100.25");
+  });
+
+  it("calcula recebido no mês incluindo início e excluindo o próximo mês", () => {
+    const resumo = calcularResumoFinanceiro(
+      [
+        {
+          status: "PAGA",
+          dataPagamento: "2026-09-01",
+          valorTotalSnapshot: "100.00",
+        },
+        {
+          status: "PAGA",
+          dataPagamento: "2026-09-30",
+          valorTotalSnapshot: "200.00",
+        },
+        {
+          status: "PAGA",
+          dataPagamento: "2026-10-01",
+          valorTotalSnapshot: "400.00",
+        },
+        {
+          status: "PAGA",
+          dataPagamento: "2026-08-31",
+          valorTotalSnapshot: "800.00",
+        },
+      ],
+      "2026-09-20",
+    );
+
+    expect(resumo.recebidoNoMes.toFixed(2)).toBe("300.00");
   });
 });
