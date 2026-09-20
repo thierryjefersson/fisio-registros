@@ -7,6 +7,7 @@ const tabs = [
   { label: "Resumo", suffix: "" },
   { label: "Avaliação", suffix: "/avaliacao" },
   { label: "Plano terapêutico", suffix: "/plano" },
+  { label: "Evoluções", suffix: "/evolucoes" },
 ];
 
 export function PatientTabs({ patientId }: { patientId: string }) {
@@ -18,7 +19,9 @@ export function PatientTabs({ patientId }: { patientId: string }) {
       <div className="flex min-w-max gap-1 border-b border-border">
         {tabs.map((tab) => {
           const href = `${base}${tab.suffix}`;
-          const active = pathname === href;
+          const active = tab.suffix
+            ? pathname === href || pathname.startsWith(`${href}/`)
+            : pathname === href;
           return (
             <Link
               aria-current={active ? "page" : undefined}

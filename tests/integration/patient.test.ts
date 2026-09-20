@@ -15,6 +15,17 @@ import {
   salvarAvaliacaoInicial,
   salvarPlanoTerapeutico,
 } from "@/features/clinical-documents/service";
+import { gerarContextoClinico } from "@/features/evolutions/context";
+import {
+  excluirEvolucao,
+  listarEvolucoes,
+  obterPacienteComContexto,
+} from "@/features/evolutions/queries";
+import {
+  atualizarStatusCobranca,
+  excluirCobranca,
+  gerarCobranca,
+} from "@/features/billing/service";
 
 const execFileAsync = promisify(execFile);
 
@@ -253,6 +264,340 @@ describe("migration e agregado Paciente", () => {
       prisma.planoTerapeutico.count({ where: { pacienteId: paciente.id } }),
     ).resolves.toBe(0);
   });
+
+  it("cria, edita e exclui evolução sem afetar outro paciente", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente com evolução",
+    });
+    const outro = await criarPacienteDeTeste(prisma, {
+      nome: "Outro paciente com evolução",
+    });
+    const evolucao = await prisma.evolucao.create({
+      data: {
+        pacienteId: paciente.id,
+        data: new Date("2026-09-18T00:00:00.000Z"),
+        horario: new Date("1970-01-01T14:30:00.000Z"),
+        conteudoMarkdown: "Conteúdo inicial",
+      },
+    });
+    const preservada = await prisma.evolucao.create({
+      data: {
+        pacienteId: outro.id,
+        data: new Date("2026-09-18T00:00:00.000Z"),
+        horario: new Date("1970-01-01T15:30:00.000Z"),
+        conteudoMarkdown: "Outro conteúdo",
+      },
+    });
+
+    await prisma.evolucao.updateMany({
+      where: { id: evolucao.id, pacienteId: paciente.id },
+      data: { conteudoMarkdown: "Conteúdo atualizado" },
+    });
+    expect(
+      await prisma.evolucao.findUniqueOrThrow({ where: { id: evolucao.id } }),
+    ).toMatchObject({ conteudoMarkdown: "Conteúdo atualizado" });
+
+    await expect(
+      excluirEvolucao(paciente.id, evolucao.id, prisma),
+    ).resolves.toBe("deleted");
+    await expect(
+      prisma.evolucao.findUnique({ where: { id: preservada.id } }),
+    ).resolves.not.toBeNull();
+  });
+
+  it("lista evoluções na ordem decrescente de data, horário e criação", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente para ordenar evoluções",
+    });
+    const common = {
+      pacienteId: paciente.id,
+      data: new Date("2026-09-18T00:00:00.000Z"),
+      horario: new Date("1970-01-01T09:00:00.000Z"),
+    };
+    await prisma.evolucao.create({
+      data: {
+        ...common,
+        conteudoMarkdown: "Primeira no empate",
+        createdAt: new Date("2026-09-18T10:00:00.000Z"),
+      },
+    });
+    await prisma.evolucao.create({
+      data: {
+        ...common,
+        conteudoMarkdown: "Segunda no empate",
+        createdAt: new Date("2026-09-18T11:00:00.000Z"),
+      },
+    });
+    await prisma.evolucao.create({
+      data: {
+        ...common,
+        horario: new Date("1970-01-01T10:00:00.000Z"),
+        conteudoMarkdown: "Horário mais recente",
+      },
+    });
+    await prisma.evolucao.create({
+      data: {
+        ...common,
+        data: new Date("2026-09-19T00:00:00.000Z"),
+        conteudoMarkdown: "Data mais recente",
+      },
+    });
+
+    const list = await listarEvolucoes(paciente.id, prisma);
+    expect(list.map((item) => item.conteudoMarkdown)).toEqual([
+      "Data mais recente",
+      "Horário mais recente",
+      "Segunda no empate",
+      "Primeira no empate",
+    ]);
+  });
+
+  it("resume quantidade e última sessão e isola o contexto por paciente", async () => {
+    const primeiro = await criarPacienteDeTeste(prisma, {
+      nome: "Contexto primeiro",
+      patologia: "Patologia primeiro",
+    });
+    const segundo = await criarPacienteDeTeste(prisma, {
+      nome: "Contexto segundo",
+      patologia: "Patologia segundo",
+    });
+    await prisma.evolucao.createMany({
+      data: [
+        {
+          pacienteId: primeiro.id,
+          data: new Date("2026-09-17T00:00:00.000Z"),
+          horario: new Date("1970-01-01T09:00:00.000Z"),
+          conteudoMarkdown: "Sessão antiga primeiro",
+        },
+        {
+          pacienteId: primeiro.id,
+          data: new Date("2026-09-18T00:00:00.000Z"),
+          horario: new Date("1970-01-01T10:00:00.000Z"),
+          conteudoMarkdown: "Sessão recente primeiro",
+        },
+        {
+          pacienteId: segundo.id,
+          data: new Date("2026-09-19T00:00:00.000Z"),
+          horario: new Date("1970-01-01T11:00:00.000Z"),
+          conteudoMarkdown: "Sessão exclusiva segundo",
+        },
+      ],
+    });
+
+    const dados = await obterPacienteComContexto(primeiro.id, prisma);
+    expect(dados?.evolucoes).toHaveLength(2);
+    expect(dados?.evolucoes[0].conteudoMarkdown).toBe(
+      "Sessão recente primeiro",
+    );
+    const contexto = gerarContextoClinico({
+      patologia: dados?.patologia,
+      queixaPrincipal: dados?.queixaPrincipal,
+      evolucoes: dados?.evolucoes ?? [],
+    });
+    expect(contexto).toContain("Patologia primeiro");
+    expect(contexto).toContain("Sessão recente primeiro");
+    expect(contexto).not.toContain("Sessão exclusiva segundo");
+  });
+
+  it("excluir paciente remove suas evoluções em cascata", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente com evolução para excluir",
+    });
+    await prisma.evolucao.create({
+      data: {
+        pacienteId: paciente.id,
+        data: new Date("2026-09-18T00:00:00.000Z"),
+        horario: new Date("1970-01-01T14:30:00.000Z"),
+        conteudoMarkdown: "Será removida",
+      },
+    });
+
+    await excluirPacientePorId(paciente.id, prisma);
+
+    await expect(
+      prisma.evolucao.count({ where: { pacienteId: paciente.id } }),
+    ).resolves.toBe(0);
+  });
+
+  it("gera cobrança com todas as sessões livres e preserva snapshots", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente com cobrança",
+      valorSessao: "100.25",
+    });
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-18", "09:00");
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-19", "10:00");
+
+    const cobranca = await gerarCobranca(paciente.id, prisma);
+
+    expect(cobranca.status).toBe("PENDENTE");
+    expect(cobranca.dataPagamento).toBeNull();
+    expect(cobranca.sessoes).toHaveLength(2);
+    expect(cobranca.valorUnitarioSnapshot.toFixed(2)).toBe("100.25");
+    expect(cobranca.valorTotalSnapshot.toFixed(2)).toBe("200.50");
+
+    await prisma.paciente.update({
+      where: { id: paciente.id },
+      data: { valorSessao: "120.00" },
+    });
+    const snapshot = await prisma.cobranca.findUniqueOrThrow({
+      where: { id: cobranca.id },
+    });
+    expect(snapshot.valorUnitarioSnapshot.toFixed(2)).toBe("100.25");
+    expect(snapshot.valorTotalSnapshot.toFixed(2)).toBe("200.50");
+
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-20", "11:00");
+    const novaCobranca = await gerarCobranca(paciente.id, prisma);
+    expect(novaCobranca.valorUnitarioSnapshot.toFixed(2)).toBe("120.00");
+    expect(novaCobranca.valorTotalSnapshot.toFixed(2)).toBe("120.00");
+  });
+
+  it("não cria cobrança vazia", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente sem sessão livre",
+    });
+
+    await expect(gerarCobranca(paciente.id, prisma)).rejects.toMatchObject({
+      code: "SEM_SESSOES_LIVRES",
+    });
+    await expect(
+      prisma.cobranca.count({ where: { pacienteId: paciente.id } }),
+    ).resolves.toBe(0);
+  });
+
+  it("impede dupla cobrança e não deixa cobrança parcial em concorrência", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente concorrente",
+    });
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-18", "09:00");
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-19", "09:00");
+
+    const resultados = await Promise.allSettled([
+      gerarCobranca(paciente.id, prisma),
+      gerarCobranca(paciente.id, prisma),
+    ]);
+
+    expect(
+      resultados.filter(({ status }) => status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      resultados.filter(({ status }) => status === "rejected"),
+    ).toHaveLength(1);
+    await expect(
+      prisma.cobranca.count({ where: { pacienteId: paciente.id } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.cobrancaSessao.count({
+        where: { cobranca: { pacienteId: paciente.id } },
+      }),
+    ).resolves.toBe(2);
+  });
+
+  it("aplica a unicidade de evolução entre cobranças", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente para restrição única",
+    });
+    const evolucao = await criarEvolucaoDeTeste(
+      prisma,
+      paciente.id,
+      "2026-09-18",
+      "09:00",
+    );
+    await gerarCobranca(paciente.id, prisma);
+
+    await expect(
+      prisma.cobranca.create({
+        data: {
+          pacienteId: paciente.id,
+          valorUnitarioSnapshot: "100.00",
+          valorTotalSnapshot: "100.00",
+          sessoes: { create: { evolucaoId: evolucao.id } },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "P2002" });
+    await expect(
+      prisma.cobranca.count({ where: { pacienteId: paciente.id } }),
+    ).resolves.toBe(1);
+  });
+
+  it("mantém status e data consistentes ao pagar e reabrir", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente para pagamento",
+    });
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-18", "09:00");
+    const cobranca = await gerarCobranca(paciente.id, prisma);
+
+    await atualizarStatusCobranca(
+      {
+        cobrancaId: cobranca.id,
+        dataPagamento: "2026-09-20",
+        pacienteId: paciente.id,
+        status: "PAGA",
+      },
+      prisma,
+    );
+    await expect(
+      prisma.cobranca.findUniqueOrThrow({ where: { id: cobranca.id } }),
+    ).resolves.toMatchObject({
+      status: "PAGA",
+      dataPagamento: new Date("2026-09-20T00:00:00.000Z"),
+    });
+
+    await atualizarStatusCobranca(
+      {
+        cobrancaId: cobranca.id,
+        pacienteId: paciente.id,
+        status: "PENDENTE",
+      },
+      prisma,
+    );
+    await expect(
+      prisma.cobranca.findUniqueOrThrow({ where: { id: cobranca.id } }),
+    ).resolves.toMatchObject({ status: "PENDENTE", dataPagamento: null });
+  });
+
+  it("bloqueia evolução cobrada e a libera ao excluir a cobrança", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente para liberar sessão",
+    });
+    const evolucao = await criarEvolucaoDeTeste(
+      prisma,
+      paciente.id,
+      "2026-09-18",
+      "09:00",
+    );
+    const cobranca = await gerarCobranca(paciente.id, prisma);
+
+    await expect(
+      excluirEvolucao(paciente.id, evolucao.id, prisma),
+    ).resolves.toBe("billed");
+    await expect(
+      excluirCobranca(paciente.id, cobranca.id, prisma),
+    ).resolves.toBe("deleted");
+    await expect(
+      prisma.cobrancaSessao.count({ where: { evolucaoId: evolucao.id } }),
+    ).resolves.toBe(0);
+    await expect(
+      excluirEvolucao(paciente.id, evolucao.id, prisma),
+    ).resolves.toBe("deleted");
+  });
+
+  it("exclui paciente com cobranças na ordem transacional correta", async () => {
+    const paciente = await criarPacienteDeTeste(prisma, {
+      nome: "Paciente com agregado financeiro",
+    });
+    await criarEvolucaoDeTeste(prisma, paciente.id, "2026-09-18", "09:00");
+    await gerarCobranca(paciente.id, prisma);
+
+    await expect(excluirPacientePorId(paciente.id, prisma)).resolves.toBe(
+      "deleted",
+    );
+    await expect(
+      prisma.cobranca.count({ where: { pacienteId: paciente.id } }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.evolucao.count({ where: { pacienteId: paciente.id } }),
+    ).resolves.toBe(0);
+  });
 });
 
 function criarPacienteDeTeste(
@@ -274,6 +619,22 @@ function criarPacienteDeTeste(
       previsaoSessoes: 5,
       diasAtendimento: ["SEGUNDA"],
       ...overrides,
+    },
+  });
+}
+
+function criarEvolucaoDeTeste(
+  prisma: PrismaClient,
+  pacienteId: string,
+  data: string,
+  horario: string,
+) {
+  return prisma.evolucao.create({
+    data: {
+      pacienteId,
+      data: new Date(`${data}T00:00:00.000Z`),
+      horario: new Date(`1970-01-01T${horario}:00.000Z`),
+      conteudoMarkdown: `Sessão de ${data} às ${horario}`,
     },
   });
 }

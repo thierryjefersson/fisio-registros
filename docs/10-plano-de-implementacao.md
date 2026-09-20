@@ -547,9 +547,9 @@ Usar esta checklist no andamento do projeto:
 - [x] Etapa 0 — Fundação executável
 - [x] Etapa 1 — Cadastro e edição de paciente
 - [x] Etapa 2 — Listagem, busca, filtros e exclusão inicial
-- [ ] Etapa 3 — Avaliação e plano terapêutico
-- [ ] Etapa 4 — Evoluções e contexto externo
-- [ ] Etapa 5 — Domínio financeiro e garantias transacionais
+- [x] Etapa 3 — Avaliação e plano terapêutico
+- [x] Etapa 4 — Evoluções e contexto externo
+- [x] Etapa 5 — Domínio financeiro e garantias transacionais
 - [ ] Etapa 6 — Financeiro do paciente e financeiro geral
 - [ ] Etapa 7 — Alta e dashboard
 - [ ] Etapa 8 — Exportação, responsividade e fechamento do MVP

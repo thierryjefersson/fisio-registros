@@ -4,6 +4,7 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import type { PatientListParams } from "./list-params";
 
 type PatientDatabase = Pick<PrismaClient, "paciente">;
+type PatientDeleteDatabase = Pick<PrismaClient, "$transaction">;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,9 +37,12 @@ export function listarPacientes(
 
 export async function excluirPacientePorId(
   id: string,
-  db: PatientDatabase = prisma,
+  db: PatientDeleteDatabase = prisma,
 ): Promise<"deleted" | "not_found"> {
   if (!idPacienteValido(id)) return "not_found";
-  const resultado = await db.paciente.deleteMany({ where: { id } });
-  return resultado.count === 1 ? "deleted" : "not_found";
+  return db.$transaction(async (tx) => {
+    await tx.cobranca.deleteMany({ where: { pacienteId: id } });
+    const resultado = await tx.paciente.deleteMany({ where: { id } });
+    return resultado.count === 1 ? "deleted" : "not_found";
+  });
 }

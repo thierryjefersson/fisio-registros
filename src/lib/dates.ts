@@ -1,4 +1,5 @@
 const DATA_CIVIL = /^(\d{4})-(\d{2})-(\d{2})$/;
+const HORARIO_CIVIL = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
 
 export function validarDataCivil(data: string): boolean {
   const partes = DATA_CIVIL.exec(data);
@@ -60,4 +61,20 @@ export function formatarDataCivil(data: string): string {
   const [, ano, mes, dia] = partes;
 
   return `${dia}/${mes}/${ano}`;
+}
+
+export function validarHorarioCivil(horario: string): boolean {
+  return HORARIO_CIVIL.test(horario);
+}
+
+export function horarioCivilParaDate(horario: string): Date {
+  if (!validarHorarioCivil(horario)) {
+    throw new TypeError("O horário civil informado é inválido.");
+  }
+  const normalizado = horario.length === 5 ? `${horario}:00` : horario;
+  return new Date(`1970-01-01T${normalizado}.000Z`);
+}
+
+export function dateParaHorarioCivil(data: Date): string {
+  return data.toISOString().slice(11, 16);
 }

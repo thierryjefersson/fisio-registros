@@ -3,11 +3,15 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { SuccessToast } from "@/components/feedback/success-toast";
+import { CopyContextActions } from "@/components/evolutions/copy-context-actions";
 import { DeletePatientDialog } from "@/components/patients/delete-patient-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { gerarContextoClinico } from "@/features/evolutions/context";
+import { obterPacienteComContexto } from "@/features/evolutions/queries";
 import { excluirPacienteAction } from "@/features/patients/actions";
-import { obterPaciente } from "@/features/patients/queries";
 import { DIAS_SEMANA, SEXO_LABELS } from "@/features/patients/schemas";
-import { formatarDataCivil } from "@/lib/dates";
+import { dateParaHorarioCivil, formatarDataCivil } from "@/lib/dates";
 import { formatarBRL, formatarTelefone } from "@/lib/formatters";
 
 export default async function PatientSummaryPage({
@@ -19,8 +23,18 @@ export default async function PatientSummaryPage({
 }) {
   const { id } = await params;
   const { salvo } = (await searchParams) ?? {};
-  const paciente = await obterPaciente(id);
+  const paciente = await obterPacienteComContexto(id);
   if (!paciente) notFound();
+
+  const contextInput = {
+    patologia: paciente.patologia,
+    queixaPrincipal: paciente.queixaPrincipal,
+    avaliacao: paciente.avaliacoes[0]?.conteudoMarkdown,
+    objetivos: paciente.planoTerapeutico?.objetivosMarkdown,
+    condutas: paciente.planoTerapeutico?.condutasMarkdown,
+    evolucoes: paciente.evolucoes,
+  };
+  const ultimaEvolucao = paciente.evolucoes[0];
 
   const dias = paciente.diasAtendimento
     .map((dia) => DIAS_SEMANA.find((item) => item.value === dia)?.label ?? dia)
@@ -50,12 +64,18 @@ export default async function PatientSummaryPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-input bg-card px-5 text-sm font-semibold text-foreground shadow-sm transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            href={`/pacientes/${paciente.id}/editar`}
+          <CopyContextActions
+            completeContext={gerarContextoClinico(contextInput, true)}
+            recentContext={gerarContextoClinico(contextInput)}
+          />
+          <Button
+            className="min-h-11 px-5"
+            nativeButton={false}
+            render={<Link href={`/pacientes/${paciente.id}/editar`} />}
+            variant="outline"
           >
             Editar cadastro
-          </Link>
+          </Button>
           <DeletePatientDialog
             action={excluirPacienteAction}
             id={paciente.id}
@@ -111,8 +131,18 @@ export default async function PatientSummaryPage({
             label="Valor por sessão"
             value={formatarBRL(paciente.valorSessao.toString())}
           />
-          <SummaryRow label="Sessões realizadas" value="0" />
-          <SummaryRow label="Última sessão" value="Nenhuma sessão registrada" />
+          <SummaryRow
+            label="Sessões realizadas"
+            value={String(paciente.evolucoes.length)}
+          />
+          <SummaryRow
+            label="Última sessão"
+            value={
+              ultimaEvolucao
+                ? `${formatarDataCivil(ultimaEvolucao.data.toISOString().slice(0, 10))} às ${dateParaHorarioCivil(ultimaEvolucao.horario)}`
+                : "Nenhuma sessão registrada"
+            }
+          />
         </SummaryCard>
       </div>
     </section>
@@ -127,10 +157,14 @@ function SummaryCard({
   title: string;
 }) {
   return (
-    <article className="rounded-xl border border-border bg-card p-5 shadow-sm sm:p-6">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <dl className="mt-5 divide-y divide-border">{children}</dl>
-    </article>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className="divide-y divide-border">{children}</dl>
+      </CardContent>
+    </Card>
   );
 }
 

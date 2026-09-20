@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@11.24.0",
   "scripts": {
+    "predev": "prisma migrate deploy",
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",

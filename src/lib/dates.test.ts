@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { formatarDataCivil } from "./dates";
+import {
+  dateParaHorarioCivil,
+  formatarDataCivil,
+  horarioCivilParaDate,
+  hojeCivil,
+} from "./dates";
+
+afterEach(() => vi.useRealTimers());
 
 describe("formatarDataCivil", () => {
   it("formata uma data civil sem deslocá-la por fuso", () => {
@@ -13,5 +20,17 @@ describe("formatarDataCivil", () => {
 
   it("rejeita datas civis inválidas", () => {
     expect(() => formatarDataCivil("2026-02-30")).toThrow("inválida");
+  });
+});
+
+describe("datas e horários clínicos", () => {
+  it("calcula o dia atual no fuso America/Fortaleza", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-19T01:30:00.000Z"));
+    expect(hojeCivil()).toBe("2026-09-18");
+  });
+
+  it("converte horário civil sem deslocamento", () => {
+    expect(dateParaHorarioCivil(horarioCivilParaDate("14:35"))).toBe("14:35");
   });
 });
